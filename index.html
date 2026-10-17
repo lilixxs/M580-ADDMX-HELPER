@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADDM / ADDMX 地址配置与解析工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    /* PLC 功能块风格 */
+    .plc-block { border: 2px solid #1c1917; position: relative; background: #ffffff; }
+    .plc-pin-in::before { content: ''; position: absolute; left: -18px; top: 50%; width: 14px; height: 2px; background: #44403c; }
+    .plc-pin-out::after { content: ''; position: absolute; right: -18px; top: 50%; width: 14px; height: 2px; background: #0284c7; }
+    table { table-layout: fixed; word-break: break-all; }
+    select option:disabled { color: #9ca3af; background-color: #f5f5f4; font-style: italic; }
+    /* SVG 矢量图专用样式 */
+    .svg-box { fill: none; stroke: #1c1917; stroke-width: 1.5; }
+    .svg-port { fill: #1c1917; }
+    .svg-txt { font-family: sans-serif; font-size: 11px; fill: #1c1917; }
+    .svg-txt-bold { font-family: sans-serif; font-size: 11px; fill: #1c1917; font-weight: bold; }
+    .svg-lbl-box { fill: none; stroke: #1c1917; stroke-width: 1; }
+    .svg-wire { fill: none; stroke: #1c1917; stroke-width: 1.5; }
+    .svg-anno { font-family: ui-monospace, monospace; font-size: 13px; font-weight: bold; fill: #dc2626; }
+  </style>
+</head>
+<body class="bg-stone-100 text-stone-800 font-sans min-h-screen py-8 px-4 sm:px-6">
+
+  <div class="max-w-5xl mx-auto">
+    <!-- 页头 -->
+    <header class="mb-8 text-center sm:text-left border-b border-stone-200 pb-5">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <span class="text-xs font-semibold px-2.5 py-1 bg-sky-100 text-sky-700 rounded-full inline-block mb-2">EcoStruxure Control Expert</span>
+          <h1 class="text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">ADDM / ADDMX 地址生成与解析工具</h1>
+        </div>
+      </div>
+    </header>
+
+    <!-- 模式切换 Tabs -->
+    <div class="flex p-1 bg-stone-200 rounded-xl max-w-md mb-6 mx-auto">
+      <button id="tabGenBtn" onclick="switchMode('generator')" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-sky-500 text-white shadow-sm transition-all border border-sky-500">
+        配置 ➔ 地址生成
+      </button>
+      <button id="tabParseBtn" onclick="switchMode('parser')" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-transparent text-stone-600 border border-transparent hover:text-stone-900 transition-all">
+        地址 ➔ 配置解析
+      </button>
+    </div>
+
+    <!-- ==================== 模块 1：配置 ➔ 地址生成 ==================== -->
+    <section id="panelGenerator" class="bg-white rounded-2xl shadow-sm border border-stone-200 p-4 sm:p-6 mb-6">
+      <div class="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
+        <h2 class="text-lg font-semibold text-stone-900">
+          拓扑参数配置
+        </h2>
+        <button onclick="resetGenerator()" class="text-xs px-3 py-1.5 rounded-lg border border-stone-300 text-stone-600 bg-white hover:bg-stone-50 transition">清空重置</button>
+      </div>
+
+      <!-- ① 选择三大分类 -->
+      <h3 class="text-sm font-semibold text-stone-700 mt-6 mb-2">① 硬件网络分类选择</h3>
+      <div class="bg-stone-50 rounded-xl p-4 border border-stone-200 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-stone-700 mb-1">1. CPU 类型</label>
+          <select id="cpuType" onchange="updateDropdowns()" class="w-full min-w-0 whitespace-nowrap text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            <option value="M580">M580 ePAC</option>
+            <option value="M340">M340</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-stone-700 mb-1">2. 位置 - 接口</label>
+          <select id="interfaceLoc" onchange="updateDropdowns()" class="w-full min-w-0 whitespace-nowrap text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            <option value="cpu_eth">本地机架 - CPU网口</option>
+            <option value="cpu_serial">本地机架 - CPU串口</option>
+            <option value="cpu_can">本地机架 - CPU 的 CAN 口</option>
+            <option value="rack_eth">本地机架 - 网口模块（NOC/NOE）</option>
+            <option value="rack_serial">本地机架 - 串口模块（NOM）</option>
+            <option value="rio_serial">远程IO机架（CRA） - 串口模块（NOM）</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-stone-700 mb-1">3. 通讯对象</label>
+          <select id="commTarget" onchange="updateDropdowns()" class="w-full min-w-0 whitespace-nowrap text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            <option value="modbus_tcp">网口设备（Modbus-TCP）</option>
+            <option value="eip">网口设备（Ethernet/IP）</option>
+            <option value="modbus_rtu">串口设备（Modbus-RTU）</option>
+            <option value="canopen">CAN从站（CANOpen）</option>
+          </select>
+        </div>
+      </div>
+      </div>
+
+      <!-- ② 参数输入 -->
+      <h3 class="text-sm font-semibold text-stone-700 mt-6 mb-2">② 节点地址参数录入</h3>
+      <div class="bg-stone-50 rounded-xl p-4 border border-stone-200 mb-6">
+        <!-- 模块所在机架位置：可选范围由 ① 的"位置 - 接口"决定 -->
+        <div class="mb-4 max-w-xs">
+          <label class="block text-sm font-medium text-stone-700 mb-1">模块所在机架位置</label>
+          <select id="rackPos" onchange="onRackPosChange()" class="w-full min-w-0 whitespace-nowrap text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            <option value="local_main">本地主机架（CPU所在机架）</option>
+            <option value="local_ext">本地扩展机架（CPU机架通过XBE扩展）</option>
+            <option value="remote_main">远程主机架（CRA所在机架）</option>
+            <option value="remote_ext">远程扩展机架（CRA机架通过XBE扩展）</option>
+          </select>
+        </div>
+        <div id="dynamicFields" class="flex flex-wrap gap-x-8 gap-y-4">
+          <!-- 动态表单 -->
+        </div>
+      </div>
+
+      <!-- 寻址矢量示意图与图例（位于 ①② 之后） -->
+      <div id="genSchematicArea" class="mb-6 p-4 sm:p-6 rounded-xl bg-stone-50 border border-stone-200">
+        <div class="text-xs text-stone-500 mb-3 font-medium border-b border-stone-200 pb-2">
+          硬件拓扑与寻址参数图解参考
+        </div>
+        <div class="flex flex-col gap-6">
+          <div id="genSchematicContent" class="w-full overflow-x-auto bg-white rounded shadow-sm border border-stone-200">
+            <!-- SVG 占位符 -->
+          </div>
+          <div class="w-full">
+            <h4 class="text-xs font-bold text-stone-700 mb-2">参数映射表：</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs sm:text-sm text-left border border-stone-200">
+                <thead class="bg-stone-100 text-stone-600">
+                  <tr><th class="border-b border-stone-200 px-2 py-1.5">变量</th><th class="border-b border-stone-200 px-2 py-1.5">含义</th></tr>
+                </thead>
+                <tbody class="divide-y divide-stone-200 odd:bg-white even:bg-stone-50">
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">r</td><td class="px-2 py-1.5 text-stone-600">机架号 (Rack)</td></tr>
+                  <tr class="bg-stone-50"><td class="px-2 py-1.5 font-bold text-stone-800 mono">m/s</td><td class="px-2 py-1.5 text-stone-600">模块槽位号 (Slot)</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">c/ch</td><td class="px-2 py-1.5 text-stone-600">通道号 (Channel)</td></tr>
+                  <tr class="bg-stone-50"><td class="px-2 py-1.5 font-bold text-sky-600 mono">{ip}</td><td class="px-2 py-1.5 text-stone-600">目标适配器或网关 IP</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">.d</td><td class="px-2 py-1.5 text-stone-600">串口链路末端从站号 (Node ID)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ 功能块及地址代码（实时自动生成） -->
+      <div id="genResultArea">
+        <h3 class="text-sm font-semibold text-stone-700 mt-6 mb-2">③ 功能块及地址代码</h3>
+        <div class="p-4 sm:p-6 bg-white rounded-xl border border-stone-200 space-y-5">
+          <!-- 地址字符串 -->
+          <div>
+            <label class="block text-sm font-medium text-stone-700 mb-1 whitespace-nowrap">地址字符串输入内容</label>
+            <div class="relative max-w-[32rem]">
+              <input type="text" id="rawStringOut" readonly class="w-full bg-stone-50 border border-stone-300 rounded-lg p-2 pr-11 text-sm font-bold text-stone-800 mono focus:outline-none">
+              <button onclick="copyToClipboard('rawStringOut', this)" title="复制" class="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-md transition shadow-sm flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>
+            </div>
+          </div>
+          <!-- 功能块选择与参数填空：第一行 读/写寄存器类型（合并读/写与寄存器类型，只列合法组合）+ 功能码 -->
+          <div class="flex flex-wrap gap-x-5 gap-y-4">
+            <div class="flex-1 min-w-[14rem] max-w-[24rem]" id="wrapObj">
+              <label class="block text-sm font-medium text-stone-700 mb-1">读/写寄存器类型 (OBJ)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">变量类型 - 寄存器区域</p>
+              <select id="f_orw" onchange="onOrwChange()" class="w-full min-w-0 text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+                <option value="%M:read">读线圈 (%M-0X)</option>
+                <option value="%M:write">写线圈 (%M-0X)</option>
+                <option value="%I:read">读离散输入 (%I-1X)</option>
+                <option value="%MW:read" selected>读保持寄存器 (%MW-4X)</option>
+                <option value="%MW:write">写保持寄存器 (%MW-4X)</option>
+                <option value="%MW:rw">读+写保持寄存器 (%MW-4X)</option>
+                <option value="%IW:read">读输入寄存器 (%IW-3X)</option>
+              </select>
+              <input type="hidden" id="f_obj" value="%MW">
+              <input type="hidden" id="f_rw" value="read">
+            </div>
+            <div class="flex-1 min-w-[12rem] max-w-[24rem]" id="wrapFc">
+              <label class="block text-sm font-medium text-stone-700 mb-1">功能码 (FC)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">十进制（十六进制）- 功能码含义</p>
+              <input type="text" id="f_fc" readonly value="03 (0x03) - 读保持寄存器" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono bg-stone-50 text-stone-600 focus:outline-none">
+            </div>
+          </div>
+          <!-- 第二行：功能块选择 -->
+          <div class="flex flex-wrap gap-x-5 gap-y-4 mt-4">
+            <div class="flex-1 min-w-[11rem] max-w-[24rem]">
+              <label class="block text-sm font-medium text-stone-700 mb-1">功能块选择</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap" id="fbHint">Modbus 读写变量（%M / %MW 等）</p>
+              <select id="f_fb" onchange="onFbChange()" class="w-full min-w-0 whitespace-nowrap text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+                <option value="READ_VAR">READ_VAR（读变量）</option>
+                <option value="WRITE_VAR">WRITE_VAR（写变量）</option>
+                <option value="DATA_EXCH">DATA_EXCH（数据交换）</option>
+              </select>
+            </div>
+          </div>
+          <!-- 第三行：起始地址 / 数量 / 发送与接收缓冲区 / 管理表 / 类型 -->
+          <div class="flex flex-wrap gap-x-5 gap-y-4 mt-4">
+            <div class="flex-1 min-w-[6.5rem]" id="wrapNum">
+              <label class="block text-sm font-medium text-stone-700 mb-1">起始地址 (NUM)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">读写起始地址（0~65535，不带区域编号）</p>
+              <input type="number" id="f_num" value="0" min="0" max="65535" oninput="updateFbUI()" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+              <p id="numMsg" class="hidden mt-1 text-xs text-red-500 whitespace-nowrap">⚠ 起始地址不能为空，范围 0~65535</p>
+            </div>
+            <div class="flex-1 min-w-[6.5rem]" id="wrapNb">
+              <label class="block text-sm font-medium text-stone-700 mb-1">数量 (NB)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">连续读写个数</p>
+              <input type="number" id="f_nb" value="10" min="1" max="125" oninput="updateFbUI()" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+              <p id="nbMsg" class="hidden mt-1 text-xs text-red-500 whitespace-nowrap"></p>
+            </div>
+            <div class="flex-1 min-w-[10rem] hidden" id="wrapEmis">
+              <label class="block text-sm font-medium text-stone-700 mb-1">发送数据区 (EMIS)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">发送缓冲区变量名</p>
+              <input type="text" id="f_emis" value="SendBuf" oninput="updateFbUI()" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            </div>
+            <div class="flex-1 min-w-[10rem]" id="wrapRecp">
+              <label class="block text-sm font-medium text-stone-700 mb-1">接收数据区 (RECP)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">接收缓冲区变量名</p>
+              <input type="text" id="f_recp" value="RecvBuf" oninput="updateFbUI()" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            </div>
+            <div class="flex-1 min-w-[10rem] hidden" id="wrapGest">
+              <label class="block text-sm font-medium text-stone-700 mb-1">管理表 (GEST)</label>
+              <p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">交换管理表 INT[0..3] 变量名</p>
+              <input type="text" id="f_gest" value="MgmtBuf" oninput="updateFbUI()" class="w-full text-sm rounded-lg border border-stone-300 p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white">
+            </div>
+            <input type="hidden" id="f_action" value="1">
+          </div>
+          <!-- TYP 说明：DATA_EXCH 操作类型由读/写选择决定（1=传输并等待接收，2=仅传输，3=接收模式） -->
+          <p id="typNote" class="hidden mt-3 text-xs leading-4 text-stone-400">TYP（操作类型）由「读 / 写」选择决定：读写 → 1（传输并等待接收）；只写 → 2（仅传输）；只读 → 3（接收模式）。</p>
+          <!-- 功能块图：参数直接填入对应管脚前 -->
+          <div class="flex justify-center overflow-x-auto">
+            <div id="fbGraphic" class="py-2"></div>
+          </div>
+          <!-- ST 程序段 -->
+          <div>
+            <label class="block text-sm font-medium text-stone-700 mb-1">程序段（ST 语法，可直接复制调用）</label>
+            <div class="relative">
+              <textarea id="stCodeOut" readonly rows="9" class="w-full bg-stone-50 border border-stone-300 rounded-lg p-3 pr-12 text-xs sm:text-sm text-stone-800 mono focus:outline-none leading-6"></textarea>
+              <button onclick="copyToClipboard('stCodeOut', this)" title="复制" class="absolute right-2 top-2 p-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-md transition shadow-sm flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>
+            </div>
+          </div>
+          <!-- 功能块引脚说明表 -->
+          <div class="mt-6">
+            <h4 class="text-xs font-bold text-stone-700 mb-2">功能块引脚说明表：</h4>
+            <div class="overflow-x-auto rounded-lg border border-stone-200">
+              <table class="w-full text-xs sm:text-sm text-left">
+                <thead class="bg-stone-100 text-stone-600">
+                  <tr>
+                    <th class="border-b border-stone-200 px-2 py-1.5 whitespace-nowrap">功能块</th>
+                    <th class="border-b border-stone-200 px-2 py-1.5 whitespace-nowrap">引脚</th>
+                    <th class="border-b border-stone-200 px-2 py-1.5 whitespace-nowrap">方向</th>
+                    <th class="border-b border-stone-200 px-2 py-1.5 whitespace-nowrap">类型</th>
+                    <th class="border-b border-stone-200 px-2 py-1.5">含义</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-stone-200 odd:bg-white even:bg-stone-50">
+                  <tr><td rowspan="5" class="px-2 py-1.5 font-bold text-stone-800 mono align-top border-r border-stone-200">READ_VAR<div class="text-stone-400 font-normal mt-1" style="font-size:0.65rem">ADR·OBJ·NUM·NB<br>→ RECP</div></td><td class="px-2 py-1.5 font-bold text-stone-800 mono">ADR</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">ADDM</td><td class="px-2 py-1.5 text-stone-600">目标设备地址，ADDM/ADDMX('...') 转换结果</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">OBJ</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">STRING</td><td class="px-2 py-1.5 text-stone-600">读/写寄存器类型（'%MW' / '%M' / '%IW' / '%I'）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">NUM</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT</td><td class="px-2 py-1.5 text-stone-600">读写起始地址（0~65535，不带区域编号）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">NB</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT</td><td class="px-2 py-1.5 text-stone-600">连续读写数量（寄存器 1~125，线圈/离散输入 1~2000）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-sky-700 mono">RECP</td><td class="px-2 py-1.5 text-stone-600">输出</td><td class="px-2 py-1.5 text-stone-600 mono">INT 数组</td><td class="px-2 py-1.5 text-stone-600">接收数据缓冲区（读到的数据）</td></tr>
+                  <tr><td rowspan="5" class="px-2 py-1.5 font-bold text-stone-800 mono align-top border-r border-stone-200">WRITE_VAR<div class="text-stone-400 font-normal mt-1" style="font-size:0.65rem">ADR·OBJ·NUM·NB·EMIS<br>（无输出管脚）</div></td><td class="px-2 py-1.5 font-bold text-stone-800 mono">ADR</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">ADDM</td><td class="px-2 py-1.5 text-stone-600">目标设备地址，ADDM/ADDMX('...') 转换结果</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">OBJ</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">STRING</td><td class="px-2 py-1.5 text-stone-600">写寄存器类型（'%MW' / '%M'）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">NUM</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT</td><td class="px-2 py-1.5 text-stone-600">读写起始地址（0~65535，不带区域编号）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">NB</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT</td><td class="px-2 py-1.5 text-stone-600">连续写入数量（寄存器 1~125，线圈 1~2000）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">EMIS</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT 数组</td><td class="px-2 py-1.5 text-stone-600">发送数据缓冲区（要写入的数据）</td></tr>
+                  <tr><td rowspan="5" class="px-2 py-1.5 font-bold text-stone-800 mono align-top border-r border-stone-200">DATA_EXCH<div class="text-stone-400 font-normal mt-1" style="font-size:0.65rem">ADR·TYP·EMIS·GEST<br>→ RECP</div></td><td class="px-2 py-1.5 font-bold text-stone-800 mono">ADR</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT 数组</td><td class="px-2 py-1.5 text-stone-600">交换目标实体地址（M340：%MWx:8，由 ADDM 初始化；M580：ADDMX 结果）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">TYP</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT</td><td class="px-2 py-1.5 text-stone-600">操作类型：1 传输并等待接收；2 仅传输；3 接收模式</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">EMIS</td><td class="px-2 py-1.5 text-stone-600">输入</td><td class="px-2 py-1.5 text-stone-600 mono">INT 数组</td><td class="px-2 py-1.5 text-stone-600">发送数据表（至少含 1 个元素，即使无数据发送）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-stone-800 mono">GEST</td><td class="px-2 py-1.5 text-stone-600">输入/输出</td><td class="px-2 py-1.5 text-stone-600 mono">INT[0..3]</td><td class="px-2 py-1.5 text-stone-600">交换管理表（交换号 / 操作与通讯报告 / 超时 / 交换长度）</td></tr>
+                  <tr><td class="px-2 py-1.5 font-bold text-sky-700 mono">RECP</td><td class="px-2 py-1.5 text-stone-600">输出</td><td class="px-2 py-1.5 text-stone-600 mono">INT 数组</td><td class="px-2 py-1.5 text-stone-600">接收数据表（即使仅传输也需至少 1 个元素）</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 模块 2：地址 ➔ 配置解析 ==================== -->
+    <section id="panelParser" class="bg-white rounded-2xl shadow-sm border border-stone-200 p-4 sm:p-6 mb-6 hidden">
+      <div class="flex items-center justify-between pb-4 mb-5 border-b border-stone-100">
+        <h2 class="text-lg font-semibold text-stone-900">逆向拆解与验证</h2>
+        <button onclick="resetParser()" class="text-xs px-3 py-1.5 rounded-lg border border-stone-300 text-stone-600 bg-white hover:bg-stone-50 transition">清空结果</button>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-stone-700 mb-2">输入需解析的指令或地址字符串：</label>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" id="parseInput" placeholder="例: ADDMX('0.0.3{192.168.100.31}\\0.8.1.15')" 
+                 class="flex-1 text-sm rounded-lg border border-stone-300 p-2.5 focus:ring-2 focus:ring-sky-400 focus:outline-none mono shadow-inner bg-stone-50">
+          <button onclick="executeParse()" class="px-6 py-2.5 text-sm font-semibold rounded-lg bg-sky-500 hover:bg-sky-600 text-white transition shrink-0 shadow-sm">解析拆分</button>
+        </div>
+      </div>
+
+      <!-- 解析结果区域 (默认隐藏) -->
+      <div id="parseResultArea" class="mt-6 hidden">
+        <div class="p-4 rounded-xl bg-stone-50 border border-stone-200 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span class="text-sm font-medium text-stone-700">识别指令：<span id="resFuncType" class="text-sky-600 mono font-bold ml-1 bg-white border border-stone-200 px-2 py-0.5 rounded">ADDM</span></span>
+          <span id="resDescription" class="text-sm text-stone-600"></span>
+        </div>
+
+        <h3 class="text-sm font-semibold text-stone-700 mt-6 mb-2">详细参数映射表</h3>
+        <div class="overflow-x-auto rounded-lg border border-stone-200">
+          <table class="w-full text-sm text-left" style="table-layout: fixed; word-break: break-all;">
+            <thead class="bg-stone-100 text-stone-600">
+              <tr>
+                <th class="border-b border-stone-200 px-3 py-2 w-1/4">路径段</th>
+                <th class="border-b border-stone-200 px-3 py-2 w-1/4">提取值</th>
+                <th class="border-b border-stone-200 px-3 py-2 w-1/2">拓扑含义解析</th>
+              </tr>
+            </thead>
+            <tbody id="parseDetailsTbody" class="divide-y divide-stone-200 bg-white"></tbody>
+          </table>
+        </div>
+        
+        <div id="parseSchematicArea" class="mt-6 p-4 sm:p-6 rounded-xl bg-stone-50 border border-stone-200">
+           <div class="text-xs text-stone-500 mb-3 font-medium">矢量图例参考：</div>
+           <div id="parseSchematicContent" class="w-full overflow-x-auto bg-white rounded shadow-sm border border-stone-200"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 注意事项区 -->
+    <div class="p-4 sm:p-5 rounded-xl bg-sky-50 border border-sky-200">
+      <div class="font-semibold text-stone-800 text-sm mb-2">
+        <span class="bg-yellow-200/70 rounded px-1 inline-block">要点提示</span> 工业寻址约束
+      </div>
+      <ul class="list-disc list-inside space-y-1 text-stone-600 text-xs sm:text-sm">
+        <li>M580 CPU 本体以太网端口固定为 <span class="mono bg-white px-1 rounded border border-stone-200">0.0.3</span>，而其子站模块地址不受此限。</li>
+        <li>在 ST 语言调用中，ADDMX 的远程跨站转义符使用双反斜杠 <span class="mono bg-white px-1 rounded border border-stone-200">\\</span> 分隔主站侧与子站侧路由。</li>
+        <li>数据/地址输入时，请确保切换至半角英文状态输入括号与大括号。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SVG 模板 -->
+  <script>
+    // 定义 CSS class 常量，匹配 Style Guide[cite: 1]
+    const clsInput = "w-full text-sm rounded-lg border border-stone-300 p-2 focus:ring-2 focus:ring-sky-400 focus:outline-none bg-white mono text-stone-800";
+    const clsReadonly = "w-full text-sm rounded-lg border border-stone-200 p-2 bg-stone-100 text-stone-500 cursor-not-allowed mono focus:outline-none";
+    const clsLabel = "block text-sm font-medium text-stone-700 mb-1";
+
+    function switchMode(mode) {
+      const pGen = document.getElementById('panelGenerator');
+      const pParse = document.getElementById('panelParser');
+      const tGenBtn = document.getElementById('tabGenBtn');
+      const tParseBtn = document.getElementById('tabParseBtn');
+      
+      const activeClass = "flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-sky-500 text-white shadow-sm transition-all border border-sky-500";
+      const inactiveClass = "flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-transparent text-stone-600 border border-transparent hover:text-stone-900 transition-all";
+
+      if (mode === 'generator') {
+        pGen.classList.remove('hidden'); pParse.classList.add('hidden');
+        tGenBtn.className = activeClass; tParseBtn.className = inactiveClass;
+      } else {
+        pGen.classList.add('hidden'); pParse.classList.remove('hidden');
+        tParseBtn.className = activeClass; tGenBtn.className = inactiveClass;
+      }
+    }
+
+    // 核心矩阵联动逻辑
+    function updateDropdowns() {
+      const cpu = document.getElementById('cpuType').value;
+      const locSel = document.getElementById('interfaceLoc');
+      const trgSel = document.getElementById('commTarget');
+      
+      const currentLoc = locSel.value;
+      const currentTrg = trgSel.value;
+
+      // 步骤1：基于 CPU 禁用/隐藏非法的 loc 选项
+      // CPU 串口与 CAN 口仅 M340 具备；M340 不支持远程子站（rio 选项直接移除）
+      Array.from(locSel.options).forEach(opt => {
+        opt.disabled = false;
+        opt.hidden = false;
+        if ((opt.value === 'cpu_serial' || opt.value === 'cpu_can') && cpu !== 'M340') {
+          opt.disabled = true; // CPU 串口 / CAN 口仅 M340 CPU 才有
+        }
+        if (opt.value === 'rio_serial') {
+          opt.disabled = (cpu === 'M340'); // M340 无远程 IO 子站：显示但置灰不可选
+        }
+      });
+      // 纠正当前被禁用的选中项
+      if (locSel.options[locSel.selectedIndex].disabled) {
+        locSel.value = 'rack_eth';
+      }
+      
+      // 步骤2：基于 Loc 禁用非法的 target 选项
+      // 串口类接口 ⇔ 串口设备（Modbus-RTU）；网口类接口 ⇔ 网口设备（Modbus-TCP / Ethernet/IP）
+      const newLoc = locSel.value;
+      const isSerialLoc = (newLoc === 'cpu_serial' || newLoc === 'rack_serial' || newLoc === 'rio_serial');
+      Array.from(trgSel.options).forEach(opt => {
+        opt.disabled = false;
+        if (newLoc === 'cpu_can') {
+          opt.disabled = (opt.value !== 'canopen'); // CAN 口只能选 CAN 从站（CANOpen）
+        } else if (isSerialLoc) {
+          opt.disabled = (opt.value !== 'modbus_rtu'); // 串口接口只能选 RTU
+        } else {
+          opt.disabled = (opt.value === 'modbus_rtu' || opt.value === 'canopen'); // 网口接口不能选 RTU / CAN
+        }
+      });
+      // 纠正当前被禁用的选中项
+      if (trgSel.options[trgSel.selectedIndex].disabled) {
+        for (let i = 0; i < trgSel.options.length; i++) {
+          if (!trgSel.options[i].disabled) {
+            trgSel.value = trgSel.options[i].value;
+            break;
+          }
+        }
+      }
+
+      // 步骤3：模块所在机架位置的可选范围由接口决定
+      // CPU 本体口（网口/串口/CAN）→ 固定本地主机架；本地机架模块 → 本地主机架/本地扩展机架；远程 IO → 远程主机架/远程扩展机架
+      let allowedPos;
+      if (newLoc === 'cpu_eth' || newLoc === 'cpu_serial' || newLoc === 'cpu_can') allowedPos = ['local_main'];
+      else if (newLoc === 'rio_serial') allowedPos = ['remote_main', 'remote_ext'];
+      else allowedPos = ['local_main', 'local_ext'];
+      const posSel = document.getElementById('rackPos');
+      Array.from(posSel.options).forEach(opt => { opt.disabled = !allowedPos.includes(opt.value); });
+      if (!allowedPos.includes(posSel.value)) posSel.value = allowedPos[0];
+
+      updateFbOptions();
+      updateSVG(cpu);
+      renderDynamicInputs();
+      calculateAddress(); // 结果区常驻：任何配置变化都实时重算
+    }
+
+    // 当前选中的机架位置（本地主机架/本地扩展/远程主机架/远程扩展）
+    function getRackPos() {
+      return document.getElementById('rackPos').value || 'local_main';
+    }
+
+    function onRackPosChange() {
+      renderDynamicInputs();
+      updateSVG();
+      calculateAddress();
+    }
+
+    // 动态生成寻址架构示意图：根据 ① 的 CPU 类型与接口位置高亮当前链路
+    function buildSchematicSVG(cpu, loc, rackPos = 'local_main') {
+      const BLUE = '#0284c7', DARK = '#1c1917', RED = '#dc2626';
+      const cpsW = 36, slotW = 40, slots = 8, rackX = 90, rackH = 150;
+      const y1 = 100, y2 = 370;                // CPU 机架 / 远程 IO 机架顶部 y
+      const rackW = cpsW + slotW * slots;
+      const slotX = i => rackX + cpsW + i * slotW;   // 编号槽位 i 的左缘（CPS 不占编号）
+      const is580 = (cpu === 'M580');
+      const isRio = (loc === 'rio_serial');
+
+      // 当前选择决定的高亮状态（选择扩展机架时，主机架对应模块不激活，激活扩展机架上的模块）
+      const isLocalExt = (rackPos === 'local_ext');
+      const isRemoteExt = (rackPos === 'remote_ext');
+      const useCpuEth = (loc === 'cpu_eth' || isRio);
+      const useCpuSer = (loc === 'cpu_serial');
+      const useCpuCan = (loc === 'cpu_can');
+      const useNoc = (loc === 'rack_eth' && !isLocalExt);    // 主机架 NOC
+      const useNom = (loc === 'rack_serial' && !isLocalExt); // 主机架 NOM
+      const useNocExt = (loc === 'rack_eth' && isLocalExt);    // 本地扩展机架 NOC
+      const useNomExt = (loc === 'rack_serial' && isLocalExt); // 本地扩展机架 NOM
+      const useRnomExt = (isRio && isRemoteExt);             // 远程扩展机架 NOM
+      const useCpuMod = useCpuEth || useCpuSer || useCpuCan;
+
+      const port = (x, y, used) =>
+        `<rect x="${x}" y="${y}" width="16" height="16" fill="${used ? BLUE : '#ffffff'}" stroke="${used ? BLUE : DARK}" stroke-width="1.5"/>`;
+      const txt = (x, y, s, cls = 'svg-txt', extra = '') =>
+        `<text x="${x}" y="${y}" class="${cls}" ${extra}>${s}</text>`;
+      const anno = (x, y, s, color = RED, anchor = 'start') =>
+        `<text x="${x}" y="${y}" class="svg-anno" font-size="11" fill="${color}" text-anchor="${anchor}">${s}</text>`;
+
+      // 机架：CPS 列（无编号）+ 8 个编号槽位，槽位号从 CPU 占用的第一个槽位起算 0
+      const rack = (ry, rx = rackX) => {
+        const sx = i => rx + cpsW + i * slotW;
+        let s = `<rect x="${rx}" y="${ry}" width="${rackW}" height="${rackH}" class="svg-box"/>`;
+        s += `<line x1="${rx + cpsW}" y1="${ry}" x2="${rx + cpsW}" y2="${ry + rackH}" class="svg-box"/>`;
+        for (let i = 0; i <= slots; i++) {
+          const x = sx(i);
+          if (i > 0) s += `<line x1="${x}" y1="${ry}" x2="${x}" y2="${ry + rackH}" class="svg-box"/>`;
+          if (i < slots) {
+            s += `<rect x="${x}" y="${ry}" width="16" height="13" class="svg-lbl-box"/>`;
+            s += txt(x + 5, ry + 10, String(i), 'svg-txt', 'font-size="9"');
+          }
+        }
+        return s;
+      };
+      // 模块占满整个槽位（宽=槽宽×跨度，高=机架高），使用中的模块蓝边框
+      const mod = (x, ry, name, span, used) => {
+        const w = span * slotW;
+        return `<rect x="${x}" y="${ry}" width="${w}" height="${rackH}" fill="#ffffff" stroke="${used ? BLUE : DARK}" stroke-width="${used ? 2.5 : 1.5}"/>`
+             + `<text x="${x + w / 2}" y="${ry + 38}" class="svg-txt-bold" text-anchor="middle">${name}</text>`;
+      };
+
+      // ---- XBE 扩展：主机架与扩展机架最右侧（槽位 7 之右，不占槽位号）各挂一个 XBE 模块 ----
+      const xbeW = 28;
+      const extRackX = rx => rx + rackW + xbeW + 4 * slotW;  // 扩展机架与主机架间隔 4 个槽位宽度
+      // XBE 模块：两个接口，第 1 口用于扩展链路；active 时模块边框/首口蓝色
+      const xbe = (rx, ry, active) => {
+        const x = rx + rackW;
+        return `<rect x="${x}" y="${ry}" width="${xbeW}" height="${rackH}" fill="#ffffff" stroke="${active ? BLUE : DARK}" stroke-width="${active ? 2.5 : 1.5}"/>`
+             + `<text x="${x + xbeW / 2}" y="${ry + 38}" class="svg-txt-bold" text-anchor="middle" font-size="9">XBE</text>`
+             + port(x + 6, ry + 60, active) + port(x + 6, ry + 92, false);
+      };
+      // 两 XBE 第 1 口之间的扩展链路（U 形，从机架下方绕行）；未选扩展机架时为非激活灰色
+      const xbeLink = (rx, rx2, ry, active) => {
+        const p1y = ry + 60 + 8;
+        const x1 = rx + rackW + 22, x2 = rx2 + rackW + 22; // 两 XBE 第 1 口右缘
+        const col = active ? BLUE : '#d6d3d1';
+        return `<polyline points="${x1},${p1y} ${x1 + 16},${p1y} ${x1 + 16},${ry + rackH + 20} ${x2 + 16},${ry + rackH + 20} ${x2 + 16},${p1y} ${x2},${p1y}" fill="none" stroke="${col}" stroke-width="2.5"/>`;
+      };
+
+      let svg = txt(rackX, 34, 'M580 / M340 寻址架构（蓝色为当前选择链路）：', 'svg-txt-bold', 'font-size="13"');
+      // 示意图说明：机架/槽位仅为示意，现场按实际模块位置设定
+      svg += txt(rackX, 52, '注：以下模块所在的机架（r）、槽位（m）为示意图，现场实际请根据实际模块位置设定', 'svg-txt', 'font-size="10" fill="#a8a29e"');
+
+      // ---- CPU 机架（r = 0）----
+      svg += rack(y1);
+      // 左侧机架标识：红色说明文字，不显示编号数字
+      svg += anno(10, y1 + 56, 'CPU机架', RED);
+      svg += anno(10, y1 + 72, 'r = 0', RED);
+      // CPS：最左侧，不占槽位编号
+      svg += `<rect x="${rackX}" y="${y1}" width="${cpsW}" height="${rackH}" fill="#ffffff" stroke="${DARK}" stroke-width="1.5"/>`
+           + `<text x="${rackX + cpsW / 2}" y="${y1 + 38}" class="svg-txt-bold" text-anchor="middle">CPS</text>`;
+      const cpuSpan = is580 ? 2 : 1;           // M580 占槽位 0-1，M340 占槽位 0
+      const cpuX = slotX(0), cpuW = cpuSpan * slotW;
+      svg += mod(cpuX, y1, 'CPU', cpuSpan, useCpuMod);
+      const nomX = slotX(3), nocX = slotX(5);
+      // 远程机架相对主机架向右平移两个槽位（方位类似末端从站）
+      const rackX2 = rackX + 2 * slotW;
+      const slotX2 = i => rackX2 + cpsW + i * slotW;
+      const craX = slotX2(0), rnomX = slotX2(3); // 远程机架：CRA 槽位 0 / NOM 槽位 3
+      // 扩展机架及其模块槽位（本地：NOC 槽 5 / NOM 槽 3；远程：NOM 槽 3）
+      const exL = extRackX(rackX);
+      const exNocX = exL + cpsW + 5 * slotW, exNomX = exL + cpsW + 3 * slotW;
+      const exR = extRackX(rackX2);
+      const exRnomX = exR + cpsW + 3 * slotW;
+      svg += mod(nomX, y1, 'NOM', 1, useNom);  // NOM 在槽位 3
+      svg += mod(nocX, y1, 'NOC', 1, useNoc);  // NOC 在槽位 5
+
+      // 槽位号标注层（压在模块上方）
+      const slotLabels = (ry, rx = rackX) => {
+        const sx = i => rx + cpsW + i * slotW;
+        let s = '';
+        for (let i = 0; i < slots; i++) {
+          s += `<rect x="${sx(i)}" y="${ry}" width="16" height="13" class="svg-lbl-box"/>`;
+          s += txt(sx(i) + 5, ry + 10, String(i), 'svg-txt', 'font-size="9"');
+        }
+        return s;
+      };
+      svg += slotLabels(y1);
+
+      // m 标注：每个模块所在槽位上方，两行显示（槽位 / m = X），左对齐模块边框最左侧
+      const mAnno = (x, v) => anno(x, y1 - 26, '槽位', RED) + anno(x, y1 - 12, `m = ${v}`, RED);
+      svg += mAnno(cpuX, 0);
+      svg += mAnno(nomX, 3);
+      svg += mAnno(nocX, 5);
+
+      // CPU 三个口：不区分 E/S/C 标识，使用中的接口统一为从上到下第 2 个
+      const cpuPX = cpuX + cpuW - 24;
+      const ethY = y1 + 92, serY = y1 + 112, canY = y1 + 132;
+      svg += port(cpuPX, ethY, false);
+      svg += port(cpuPX, serY, useCpuMod);
+      svg += port(cpuPX, canY, false);
+
+      // NOM 两个口 / NOC 三个口（使用中的接口统一为从上到下第 2 个）
+      svg += port(nomX + 12, y1 + 96, false) + port(nomX + 12, y1 + 118, useNom);
+      svg += port(nocX + 12, y1 + 88, false) + port(nocX + 12, y1 + 110, useNoc) + port(nocX + 12, y1 + 132, false);
+
+      // ---- 本地扩展机架（非 rio 场景常显；仅选择"本地扩展机架"时 XBE 模块与链路激活）----
+      if (!isRio) {
+        const extOn = isLocalExt;
+        const ex = exL;
+        svg += rack(y1, ex);
+        svg += `<rect x="${ex}" y="${y1}" width="${cpsW}" height="${rackH}" fill="#ffffff" stroke="${DARK}" stroke-width="1.5"/>`
+             + `<text x="${ex + cpsW / 2}" y="${y1 + 38}" class="svg-txt-bold" text-anchor="middle">CPS</text>`;
+        // 扩展机架上的 NOM（槽 3）/ NOC（槽 5）模块，含接口与槽位标注
+        svg += mod(exNomX, y1, 'NOM', 1, useNomExt);
+        svg += mod(exNocX, y1, 'NOC', 1, useNocExt);
+        svg += slotLabels(y1, ex);
+        svg += anno(exNomX, y1 - 26, '槽位', RED) + anno(exNomX, y1 - 12, 'm = 3', RED);
+        svg += anno(exNocX, y1 - 26, '槽位', RED) + anno(exNocX, y1 - 12, 'm = 5', RED);
+        svg += port(exNomX + 12, y1 + 96, false) + port(exNomX + 12, y1 + 118, useNomExt);
+        svg += port(exNocX + 12, y1 + 88, false) + port(exNocX + 12, y1 + 110, useNocExt) + port(exNocX + 12, y1 + 132, false);
+        svg += xbe(rackX, y1, extOn) + xbe(ex, y1, extOn) + xbeLink(rackX, ex, y1, extOn);
+        svg += anno(ex - 110, y1 + 56, '扩展机架 1,2...', RED);
+        svg += anno(ex - 110, y1 + 72, 'r = 1,2...', RED);
+      }
+
+      // ---- 远程 IO 机架（仅 rio_serial 场景显示，整体右移）----
+      if (isRio) {
+      svg += rack(y2, rackX2);
+      svg += anno(6, y2 + 56, '远程IO机架', RED);
+      svg += anno(6, y2 + 72, 'r1 = 0', RED);
+      svg += `<rect x="${rackX2}" y="${y2}" width="${cpsW}" height="${rackH}" fill="#ffffff" stroke="${DARK}" stroke-width="1.5"/>`
+           + `<text x="${rackX2 + cpsW / 2}" y="${y2 + 38}" class="svg-txt-bold" text-anchor="middle">CPS</text>`;
+      svg += mod(craX, y2, 'CRA', 1, isRio);          // CRA 在槽位 0
+      svg += mod(rnomX, y2, 'NOM', 1, !isRemoteExt);  // 远程 NOM 在槽位 3（选择远程扩展机架时不激活）
+      svg += slotLabels(y2, rackX2);
+
+      // s1 标注：远程机架模块槽位上方，两行显示，左对齐模块边框最左侧
+      const s1Anno = (x, v) => anno(x, y2 - 26, '槽位', RED) + anno(x, y2 - 12, `s1 = ${v}`, RED);
+      svg += s1Anno(craX, 0);
+      svg += s1Anno(rnomX, 3);
+
+      // CRA 三个口 / 远程 NOM 两个口（使用中的接口统一为从上到下第 2 个）
+      svg += port(craX + 12, y2 + 88, false) + port(craX + 12, y2 + 110, true) + port(craX + 12, y2 + 132, false);
+      svg += port(rnomX + 12, y2 + 96, false) + port(rnomX + 12, y2 + 118, !isRemoteExt);
+
+      // ---- 远程扩展机架（仅选择"远程扩展机架"时 XBE 模块与链路激活）----
+      const extOn2 = isRemoteExt;
+      const ex2 = exR;
+      svg += rack(y2, ex2);
+      svg += `<rect x="${ex2}" y="${y2}" width="${cpsW}" height="${rackH}" fill="#ffffff" stroke="${DARK}" stroke-width="1.5"/>`
+           + `<text x="${ex2 + cpsW / 2}" y="${y2 + 38}" class="svg-txt-bold" text-anchor="middle">CPS</text>`;
+      // 远程扩展机架上的 NOM（槽 3）模块，含接口与槽位标注
+      svg += mod(exRnomX, y2, 'NOM', 1, useRnomExt);
+      svg += slotLabels(y2, ex2);
+      svg += anno(exRnomX, y2 - 26, '槽位', RED) + anno(exRnomX, y2 - 12, 's1 = 3', RED);
+      svg += port(exRnomX + 12, y2 + 96, false) + port(exRnomX + 12, y2 + 118, useRnomExt);
+      svg += xbe(rackX2, y2, extOn2) + xbe(ex2, y2, extOn2) + xbeLink(rackX2, ex2, y2, extOn2);
+      svg += anno(ex2 - 110, y2 + 56, '扩展机架 1,2...', RED);
+      svg += anno(ex2 - 110, y2 + 72, 'r1 = 1,2...', RED);
+      } // end isRio 远程机架
+
+      // ---- 链路与末端从站设备（L 形接线）----
+      const tx = rackX + rackW + 30;           // 设备箱左缘
+      const tcx = tx + 14;                     // 设备箱中心 x
+      const wire = (pts) => `<polyline points="${pts}" fill="none" stroke="${BLUE}" stroke-width="2.5"/>`;
+      const devBox = (y, label, bx = tx) =>
+        `<rect x="${bx}" y="${y}" width="28" height="28" fill="#ffffff" stroke="${BLUE}" stroke-width="2"/>`
+        + `<text x="${bx + 14}" y="${y + 19}" class="svg-txt-bold" text-anchor="middle">${label}</text>`;
+
+      if (isRio) {
+        // CPU 网口（第 2 口）→ 远程 CRA（第 2 口）：L 形接线，先竖直向下再水平向右
+        const downX = cpuPX + 8;               // CPU 端口中心竖线
+        const craP1Y = y2 + 110 + 8;           // CRA 第 2 口中心 y
+        svg += wire(`${downX},${serY + 16} ${downX},${craP1Y} ${craX + 12},${craP1Y}`);
+        // c 标注：主站 CPU 网口通道，两行显示，放在 L 形竖线右边
+        svg += anno(downX + 8, y1 + rackH + 14, '通道', RED);
+        svg += anno(downX + 8, y1 + rackH + 28, 'c = 3', RED);
+        // {ip}：远程 IO 站地址，显示在 CRA 模块下方
+        svg += anno(craX + slotW / 2, y2 + rackH + 16, '远程IO站IP地址 {ip}', BLUE, 'middle');
+        // 远程 NOM 第 2 口 → 串口从站（L 形：先竖直向下，再水平向右接入设备箱）
+        // 选择远程扩展机架时：改由扩展机架上的 NOM 出线，主机架侧连线与设备说明不再绘制
+        const rpY = y2 + 118 + 8, devY = y2 + rackH + 44, devMidY = devY + 14;
+        const srcNomX = isRemoteExt ? exRnomX : rnomX;
+        const txDev2 = isRemoteExt ? (exR + rackW + xbeW + 30) : tx;
+        const downX2 = srcNomX + 20;
+        svg += wire(`${downX2},${rpY + 8} ${downX2},${devMidY} ${txDev2},${devMidY}`);
+        // c1 标注：远程 NOM 通道，两行显示，放在 L 形竖线右边（下移避开 XBE 扩展链路）
+        svg += anno(downX2 + 8, y2 + rackH + 34, '通道', RED);
+        svg += anno(downX2 + 8, y2 + rackH + 48, 'c1 = 1', RED);
+        svg += devBox(devY, 'd', txDev2);
+        svg += anno(txDev2 + 36, devY + 18, '从站号 .d', RED);
+      } else {
+        // 本地链路：使用的口 → L 形接线 → 末端设备（扩展机架时由扩展机架上的模块出线）
+        const txExt = exL + rackW + xbeW + 30;  // 扩展机架场景的设备箱左缘（扩展机架 XBE 之右）
+        let py = null, fromX = null, cVal = null, isEth = false, txDev = tx;
+        if (useCpuEth)      { py = serY + 8; fromX = cpuPX + 16; cVal = 3; isEth = true; }
+        else if (useCpuSer) { py = serY + 8; fromX = cpuPX + 16; cVal = 0; }
+        else if (useCpuCan) { py = serY + 8; fromX = cpuPX + 16; cVal = 2; }
+        else if (useNom)    { py = y1 + 118 + 8; fromX = nomX + 28; cVal = 0; }
+        else if (useNoc)    { py = y1 + 110 + 8; fromX = nocX + 28; cVal = 0; isEth = true; }
+        else if (useNomExt) { py = y1 + 118 + 8; fromX = exNomX + 28; cVal = 0; txDev = txExt; }
+        else if (useNocExt) { py = y1 + 110 + 8; fromX = exNocX + 28; cVal = 0; txDev = txExt; isEth = true; }
+        if (py !== null) {
+          // L 形：先竖直向下出机架，再水平向右接入设备箱
+          const devY = y1 + rackH + 44, devMidY = devY + 14;
+          const downX = fromX - 8;
+          // c 标注：两行显示，放在 L 形竖线右边（下移避开 XBE 扩展链路）
+          svg += anno(downX + 8, y1 + rackH + 34, '通道', RED);
+          svg += anno(downX + 8, y1 + rackH + 48, `c = ${cVal}`, RED);
+          svg += wire(`${downX},${py + 8} ${downX},${devMidY} ${txDev},${devMidY}`);
+          svg += devBox(devY, isEth ? 'ip' : 'd', txDev);
+          if (isEth) {
+            // {ip} 显示在末端设备后面，与 .d 一同显示
+            svg += anno(txDev + 36, devY + 10, '从站IP {ip}', BLUE);
+            svg += anno(txDev + 36, devY + 24, '从站号 .d', RED);
+          } else {
+            svg += anno(txDev + 36, devY + 18, '从站号 .d', RED);
+          }
+        }
+      }
+
+      const vbH = isRio ? 640 : (y1 + rackH + 44 + 28 + 24); // 无远程机架时收紧画布
+      const vbW = isRio ? 1240 : 1180;                        // 扩展机架 + XBE + 扩展侧末端设备占用的额外宽度
+      return `<svg viewBox="0 0 ${vbW} ${vbH}" class="w-full h-auto p-4" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+    }
+
+    function updateSVG() {
+      const cpu = document.getElementById('cpuType').value;
+      const loc = document.getElementById('interfaceLoc').value;
+      const content = buildSchematicSVG(cpu, loc, getRackPos());
+      document.getElementById('genSchematicContent').innerHTML = content;
+      document.getElementById('parseSchematicContent').innerHTML = content;
+    }
+
+    function buildInputHTML(id, label, value, isFixed = false, type="text") {
+      const cssClass = isFixed ? clsReadonly : clsInput;
+      const readOnlyAttr = isFixed ? "readonly" : "";
+      return `<div class="flex-1 min-w-[10rem]"><label class="${clsLabel}">${label}</label><input type="${type}" id="${id}" value="${value}" class="${cssClass}" ${readOnlyAttr} oninput="autoRecalc()"></div>`;
+    }
+
+    function buildSelectHTML(id, label, options, subNote = '') {
+      const noteLine = subNote ? `<p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">${subNote}</p>` : '';
+      let optsHTML = options.map(o => `<option value="${o.val}">${o.text}</option>`).join('');
+      return `<div class="flex-1 min-w-[12rem]"><label class="${clsLabel}">${label}</label>${noteLine}<select id="${id}" class="${clsInput}" onchange="autoRecalc()">${optsHTML}</select></div>`;
+    }
+
+    const IP_RE = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+
+    // 本地端口 r.m.c 固定值规则：返回被锁定分量、默认值、r 取值范围与提示
+    // rackPos：local_main 本地主机架 / local_ext 本地扩展机架 / remote_main / remote_ext（后两者仅 rio）
+    function rmcRule(cpu, loc, rackPos) {
+      const extMax = (cpu === 'M580') ? 7 : 4; // 本地扩展机架 r 上限：M580 = 7 / M340 = 4
+      if (loc === 'cpu_eth')     return { fixed:{r:0,m:0,c:3}, def:{}, hint:'固定值：CPU 本体网口恒为 0.0.3' };
+      if (loc === 'cpu_serial')  return cpu === 'M340'
+                                   ? { fixed:{r:0,m:0,c:0}, def:{}, hint:'固定值：M340 CPU 串口恒为 0.0.0' }
+                                   : { fixed:{}, def:{r:0,m:0,c:0}, hint:'' };
+      if (loc === 'cpu_can')     return { fixed:{r:0,m:0,c:2}, def:{}, hint:'固定值：M340 CPU 的 CAN 口恒为 0.0.2' };
+      if (loc === 'rack_eth') {
+        if (rackPos === 'local_ext') return { fixed:{c:0}, def:{r:1,m:1}, rRange:[1, extMax], hint:`扩展机架：r = 1-${extMax} 必填；c 恒为 0` };
+        return { fixed:{r:0,c:0}, def:{m:1}, hint:'主机架：r 恒为 0；c 恒为 0' };
+      }
+      if (loc === 'rack_serial') {
+        if (rackPos === 'local_ext') return { fixed:{c:0}, def:{r:1,m:2}, rRange:[1, extMax], hint:`扩展机架：r = 1-${extMax} 必填；c 对应 Port 1/2` };
+        return { fixed:{r:0}, def:{m:2,c:0}, hint:'主机架：r 恒为 0；c 对应 Port 1/2' };
+      }
+      return { fixed:{r:0,m:0,c:3}, def:{}, hint:'固定值：主站侧端口恒为 0.0.3' }; // rio_serial
+    }
+
+    function buildRmcHTML(cpu, loc) {
+      const rackPos = getRackPos();
+      const rule = rmcRule(cpu, loc, rackPos);
+      const ranges = { r:(rule.rRange || [0,7]), m:[0,11], c:[0,3] };
+      const titles = { r:'机架号 (r)', m:'模块编号 (m)', c:'通道号 (c)' };
+      const cell = (key) => {
+        const isFixed = rule.fixed[key] !== undefined;
+        const val = isFixed ? rule.fixed[key] : rule.def[key];
+        const [min, max] = ranges[key];
+        return `<div class="flex-1 min-w-[4.5rem]">
+          <label class="block text-xs font-medium text-stone-500 mb-1 whitespace-nowrap">${titles[key]}</label>
+          <input type="number" id="f_${key}" value="${val}" min="${min}" max="${max}" ${isFixed ? 'disabled' : ''}
+            oninput="clampNum(this, ${min}, ${max})"
+            class="w-full text-center text-sm rounded-lg border p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none ${isFixed ? 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed' : 'border-stone-300 bg-white'}">
+        </div>`;
+      };
+      return `<div class="flex-none w-[15rem]">
+        <label class="${clsLabel}">主机架接口编号</label>
+        <div class="flex items-end gap-1">
+          ${cell('r')}<span class="text-stone-400 mono font-bold pb-2">.</span>${cell('m')}<span class="text-stone-400 mono font-bold pb-2">.</span>${cell('c')}
+        </div>
+        <p class="text-xs text-stone-400 mt-1 min-h-[1.25rem]">${rule.hint}</p>
+      </div>`;
+    }
+
+    // 子站串口位置 r1.s1.c1：三个独立输入框，组标题"远程机架接口编号"
+    // 远程主机架 → r1 固定 0；远程扩展机架 → r1 从 1 开始（M580 远程扩展上限 1）
+    function buildSubRmcHTML() {
+      const rackPos = getRackPos();
+      const r1Fixed = (rackPos !== 'remote_ext');
+      const ranges = { r1:(r1Fixed ? [0,7] : [1,1]), s1:[0,11], c1:[0,3] };
+      const titles = { r1:'机架号 (r1)', s1:'模块编号 (s1)', c1:'通道号 (c1)' };
+      const defs = { r1:(r1Fixed ? 0 : 1), s1:8, c1:1 };
+      const cell = (key) => {
+        const isFixed = (key === 'r1') && r1Fixed;
+        const [min, max] = ranges[key];
+        return `<div class="flex-1 min-w-[4.5rem]">
+          <label class="block text-xs font-medium text-stone-500 mb-1 whitespace-nowrap">${titles[key]}</label>
+          <input type="number" id="f_${key}" value="${defs[key]}" min="${min}" max="${max}" ${isFixed ? 'disabled' : ''}
+            oninput="clampNum(this, ${min}, ${max})"
+            class="w-full text-center text-sm rounded-lg border p-2 mono focus:ring-2 focus:ring-sky-400 focus:outline-none ${isFixed ? 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed' : 'border-stone-300 bg-white'}">
+        </div>`;
+      };
+      const hint = r1Fixed ? '主机架：r1 恒为 0' : '扩展机架：r1 = 1 必填';
+      return `<div class="flex-none w-[15rem]">
+        <label class="${clsLabel}">远程机架接口编号</label>
+        <div class="flex items-end gap-1">
+          ${cell('r1')}<span class="text-stone-400 mono font-bold pb-2">.</span>${cell('s1')}<span class="text-stone-400 mono font-bold pb-2">.</span>${cell('c1')}
+        </div>
+        <p class="text-xs text-stone-400 mt-1 min-h-[1.25rem]">${hint}</p>
+      </div>`;
+    }
+
+    function clampNum(el, min, max) {
+      if (el.value !== '') {
+        let v = parseInt(el.value, 10);
+        if (!isNaN(v)) {
+          if (v < min) el.value = min;
+          if (v > max) el.value = max;
+        }
+      }
+      autoRecalc();
+    }
+
+    // IP 输入框：自带预留高度的报错小字（显隐不改变块高度）；subNote 为标题下说明行（与左侧双行标题对齐用）
+    // linkChk=true 时附加"使用网络链路名"勾选框（仅 ADDM 网口设备场景）
+    function buildIpHTML(id, label, value, subNote = '', linkChk = false) {
+      const noteLine = subNote ? `<p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">${subNote}</p>` : '';
+      const chkLine = linkChk
+        ? `<label class="flex items-center gap-1.5 mt-1 text-xs text-stone-600 cursor-pointer whitespace-nowrap"><input type="checkbox" id="f_uselink" onchange="onLinkChkChange()" class="accent-sky-600">使用网络链路名</label>`
+        : '';
+      return `<div class="flex-1 min-w-[12rem]">
+        <label class="${clsLabel}">${label}</label>
+        ${noteLine}
+        <input type="text" id="${id}" value="${value}" class="${clsInput}" oninput="validateIP(this)">
+        ${chkLine}
+        <p id="err_${id}" class="text-xs text-red-500 mt-1 min-h-[1.25rem]"></p>
+      </div>`;
+    }
+
+    function onLinkChkChange() {
+      const ipEl = document.getElementById('f_ip');
+      const chk = document.getElementById('f_uselink');
+      // 切换勾选状态时清空原内容并填入对应默认值
+      if (ipEl && chk) ipEl.value = chk.checked ? 'Ethernet_1' : '192.168.1.10';
+      if (ipEl) validateIP(ipEl);
+      autoRecalc();
+    }
+
+    function validateIP(el) {
+      const err = document.getElementById('err_' + el.id);
+      const v = el.value.replace(/[{}]/g, '').trim();
+      const useLink = document.getElementById('f_uselink')?.checked;
+      let bad, msg = '';
+      if (useLink) {
+        // 网络链路名：英文/数字/下划线组合，不能为空
+        bad = !/^[A-Za-z0-9_]+$/.test(v);
+        msg = '⚠ 链路名不能为空，仅限英文、数字、下划线组合';
+      } else {
+        bad = v !== '' && !IP_RE.test(v);
+        msg = '⚠ IP 地址格式不正确（应为 IPv4，如 192.168.1.10）';
+      }
+      if (err) err.textContent = bad ? msg : '';
+      el.classList.toggle('border-red-400', bad);
+      el.classList.toggle('border-stone-300', !bad);
+      autoRecalc();
+    }
+
+    // 从站号输入框：数字、非空、1-255，自带预留高度的报错小字
+    function buildNodeHTML(id, label, value, subNote = '', allowEmpty = false) {
+      const noteLine = subNote ? `<p class="text-xs leading-4 text-stone-400 mb-1 whitespace-nowrap">${subNote}</p>` : '';
+      return `<div class="flex-1 min-w-[10rem]">
+        <label class="${clsLabel} whitespace-nowrap">${label}</label>
+        ${noteLine}
+        <input type="number" id="${id}" value="${value}" min="1" max="255" data-allow-empty="${allowEmpty ? 1 : 0}" class="${clsInput}" oninput="validateNode(this)">
+        <p id="err_${id}" class="text-xs text-red-500 mt-1 min-h-[1.25rem]"></p>
+      </div>`;
+    }
+
+    function validateNode(el) {
+      const err = document.getElementById('err_' + el.id);
+      const v = el.value.trim();
+      const allowEmpty = el.dataset.allowEmpty === '1';
+      const n = parseInt(v, 10);
+      const empty = v === '';
+      const bad = empty ? !allowEmpty : (isNaN(n) || !/^\d+$/.test(v) || n < 1 || n > 255);
+      if (err) {
+        if (empty && allowEmpty) {
+          // 允许为空：提示缺省行为（访问站号 255），非错误
+          err.textContent = '站号不设置则访问站号255的设备';
+          err.classList.remove('text-red-500');
+          err.classList.add('text-amber-500');
+        } else {
+          err.textContent = bad ? '⚠ 站号不能为空，须为 1-255 的数字' : '';
+          err.classList.add('text-red-500');
+          err.classList.remove('text-amber-500');
+        }
+      }
+      el.classList.toggle('border-red-400', bad);
+      el.classList.toggle('border-stone-300', !bad);
+      autoRecalc();
+    }
+
+    function renderDynamicInputs() {
+      const cpu = document.getElementById('cpuType').value;
+      const loc = document.getElementById('interfaceLoc').value;
+      const trg = document.getElementById('commTarget').value;
+      const container = document.getElementById('dynamicFields');
+      let html = '';
+
+      // 本地端口 r.m.c（所有场景都有，按规则锁定固定分量）
+      html += buildRmcHTML(cpu, loc);
+
+      // IP 字段：远程 IO 机架 → CRA 适配器 IP；本地网口 → 目标地址 IP（附"使用网络链路名"勾选框）；本地串口不显示
+      if (loc === 'rio_serial') {
+        html += buildIpHTML('f_ip', 'CRA 适配器 IP', '192.168.100.31', '远程 IO 机架适配器的 IPv4 地址');
+      } else if (loc === 'cpu_eth' || loc === 'rack_eth') {
+        html += buildIpHTML('f_ip', '目标地址 IP', '192.168.1.10', '目标设备的 IPv4 地址', true);
+      }
+
+      // 通讯对象差异字段
+      if (trg === 'modbus_tcp') {
+        html += buildNodeHTML('f_node', 'Modbus 从站号 (.d)', '1', '网口链路末端从站（1-255，可空）', true);
+        if (loc === 'cpu_eth' || loc === 'rack_eth') {
+          html += buildSelectHTML('f_suffix', '目标服务后缀 (可选)', [{val:'', text:'无(同 TCP.MBS)'}, {val:'SYS', text:'获取RIO/DIO模块状态（SYS）'}, {val:'TCP.MBS', text:'ModbusTCP通讯（TCP.MBS）'}], '缺省等同于 TCP.MBS');
+        }
+      } else if (trg === 'eip') {
+        html += buildSelectHTML('f_suffix', 'CIP 报文模式', [{val:'CON.CIP', text:'保持连接（CON.CIP）'}, {val:'UNC.CIP', text:'不主动连接（UNC.CIP）'}], 'Ethernet/IP 报文连接方式');
+      }
+
+      // 串口从站 / 远程级联字段
+      if (loc === 'rio_serial') {
+        // 子站模块位置与从站号独占第二行
+        html += `<div class="basis-full flex flex-wrap gap-x-8 gap-y-4">`;
+        html += buildSubRmcHTML();
+        html += buildNodeHTML('f_node', 'Modbus 从站号 (.d)', '15', '子站串口链路末端从站（1-255，可空）', true);
+        html += `</div>`;
+      } else if (loc === 'cpu_can') {
+        html += buildNodeHTML('f_node', 'CAN 从站号', '4', 'CANOpen 从站节点（1-255）');
+      } else if (loc === 'cpu_serial' || loc === 'rack_serial') {
+        html += buildNodeHTML('f_node', 'Modbus 从站号 (.d)', '4', '串口链路末端从站（1-255，可空）', true);
+      }
+
+      container.innerHTML = html;
+    }
+
+    function autoRecalc() { calculateAddress(); }
+
+    function calculateAddress() {
+      const loc = document.getElementById('interfaceLoc').value;
+
+      const rv = document.getElementById('f_r')?.value ?? '0';
+      const mv = document.getElementById('f_m')?.value ?? '0';
+      const cv = document.getElementById('f_c')?.value ?? '0';
+      const rmc = `${rv}.${mv}.${cv}`;
+      const ip = document.getElementById('f_ip')?.value.trim() || '';
+      const node = document.getElementById('f_node')?.value.trim() || '';
+      const suffix = document.getElementById('f_suffix')?.value || '';
+      const r1v = document.getElementById('f_r1')?.value ?? '0';
+      const s1v = document.getElementById('f_s1')?.value ?? '0';
+      const c1v = document.getElementById('f_c1')?.value ?? '0';
+      const remRmc = `${r1v}.${s1v}.${c1v}`;
+
+      let addrStr = '';
+      let funcType = 'ADDM';
+
+      if (loc === 'rio_serial') {
+        addrStr = `${rmc}{${ip}}\\\\${remRmc}${node ? '.' + node : ''}`;
+        funcType = 'ADDMX';
+      } else if (loc === 'cpu_serial' || loc === 'cpu_can' || loc === 'rack_serial') {
+        addrStr = `${rmc}${node ? '.' + node : ''}`; // 本地串口：r.m.c[.站号]
+      } else {
+        // 网口类接口：r.m.c{IP}[站号][.目标服务后缀]；站号 d 直接拼在 {IP} 后，与后缀用 . 分隔
+        const trg = document.getElementById('commTarget').value;
+        let tail = '';
+        if (trg === 'modbus_tcp' && node) tail = node + (suffix ? `.${suffix}` : '');
+        else if (suffix) tail = suffix;
+        addrStr = `${rmc}{${ip}}${tail}`;
+      }
+
+      lastFuncType = funcType;
+      document.getElementById('rawStringOut').value = `'${addrStr}'`;
+      updateFbUI();
+    }
+
+    // ========== ③ 功能块程序段生成 ==========
+    let lastFuncType = 'ADDM';
+
+    // 通讯对象 → 协议名
+    function protoName() {
+      const t = document.getElementById('commTarget').value;
+      return { modbus_tcp: 'Modbus-TCP', modbus_rtu: 'Modbus-RTU', eip: 'Ethernet/IP', canopen: 'CANOpen' }[t] || '';
+    }
+
+    // 功能块与通讯对象联动：Modbus → READ_VAR(读)/WRITE_VAR(写)/DATA_EXCH(读+写，16#16)；Ethernet/IP、CANOpen → DATA_EXCH
+    function updateFbOptions() {
+      const trg = document.getElementById('commTarget').value;
+      const isModbus = (trg === 'modbus_tcp' || trg === 'modbus_rtu');
+      const fbSel = document.getElementById('f_fb');
+      Array.from(fbSel.options).forEach(o => {
+        o.disabled = isModbus ? false : (o.value !== 'DATA_EXCH');
+      });
+      if (fbSel.options[fbSel.selectedIndex].disabled) fbSel.value = isModbus ? 'READ_VAR' : 'DATA_EXCH';
+      document.getElementById('fbHint').textContent = isModbus ? '读→READ_VAR；写→WRITE_VAR；读+写→DATA_EXCH' : '显式报文交换：只读 / 只写 / 读写';
+      // 读/写状态（隐藏字段）：Modbus 由功能块推导；DATA_EXCH 场景默认读写
+      const rwDef = isModbus ? (fbSel.value === 'WRITE_VAR' ? 'write' : fbSel.value === 'DATA_EXCH' ? 'rw' : 'read') : 'rw';
+      document.getElementById('f_rw').value = rwDef;
+      document.getElementById('f_action').value = { rw: '1', write: '2', read: '3' }[rwDef] || '1';
+      // 同步合并下拉（读/写寄存器类型）显示
+      const orwSel = document.getElementById('f_orw');
+      const orwCombo = document.getElementById('f_obj').value + ':' + rwDef;
+      if (orwSel.querySelector(`option[value="${orwCombo}"]`)) orwSel.value = orwCombo;
+    }
+
+    // Modbus 功能码表（M340/M580 手册）：寄存器类型 + 读/写 → 功能码（输入区 %I/%IW 只读，不可写）
+    const FC_MAP = {
+      '%M':  { read: '01 (0x01) - 读线圈',       write: '15 (0x0F) - 写多线圈' },
+      '%I':  { read: '02 (0x02) - 读离散输入' },
+      '%MW': { read: '03 (0x03) - 读保持寄存器', write: '16 (0x10) - 写多寄存器' },
+      '%IW': { read: '04 (0x04) - 读输入寄存器' }
+    };
+    const FC_DEXCH = '22 (0x16) - 读+写多个寄存器';
+
+    // 读/写寄存器类型切换（合并下拉，只列合法组合）：同步隐藏字段后校验功能块合法性
+    function onOrwChange() {
+      const [obj, rw] = document.getElementById('f_orw').value.split(':');
+      document.getElementById('f_obj').value = obj;
+      document.getElementById('f_rw').value = rw;
+      document.getElementById('f_action').value = { rw: '1', write: '2', read: '3' }[rw] || '1';
+      // DATA_EXCH 可实现所有类型功能码的通讯：保持功能块不变
+      const fbSel = document.getElementById('f_fb');
+      const trg = document.getElementById('commTarget').value;
+      const isModbus = (trg === 'modbus_tcp' || trg === 'modbus_rtu');
+      if (isModbus && fbSel.value !== 'DATA_EXCH') {
+        fbSel.value = (rw === 'write') ? 'WRITE_VAR' : (rw === 'rw') ? 'DATA_EXCH' : 'READ_VAR';
+      }
+      updateFbUI();
+    }
+
+    // 功能块手动切换：READ_VAR/WRITE_VAR 反向同步读/写；DATA_EXCH 不改变读/写与寄存器类型
+    function onFbChange() {
+      const fb = document.getElementById('f_fb').value;
+      if (fb === 'READ_VAR') document.getElementById('f_rw').value = 'read';
+      else if (fb === 'WRITE_VAR') document.getElementById('f_rw').value = 'write';
+      const rw = document.getElementById('f_rw').value;
+      document.getElementById('f_action').value = { rw: '1', write: '2', read: '3' }[rw] || '1';
+      updateFbUI();
+    }
+
+    // 根据选择的功能块与填空参数，生成功能块图（参数填入管脚前）与 ST 程序段
+    function updateFbUI() {
+      const fbEl = document.getElementById('f_fb');
+      if (!fbEl) return;
+      const show = (id, on) => document.getElementById(id).classList.toggle('hidden', !on);
+      const trg = document.getElementById('commTarget').value;
+      const isModbusTrg = (trg === 'modbus_tcp' || trg === 'modbus_rtu');
+      // 读/写方向决定不能使用的功能块：读→禁 WRITE_VAR；写→禁 READ_VAR；读+写→仅 DATA_EXCH
+      let fb = fbEl.value;
+      if (isModbusTrg) {
+        const rw = document.getElementById('f_rw').value;
+        Array.from(fbEl.options).forEach(o => {
+          o.disabled = (rw === 'read' && o.value === 'WRITE_VAR')
+                    || (rw === 'write' && o.value === 'READ_VAR')
+                    || (rw === 'rw' && o.value !== 'DATA_EXCH');
+        });
+        if (fbEl.options[fbEl.selectedIndex].disabled) {
+          fbEl.value = (rw === 'write') ? 'WRITE_VAR' : (rw === 'rw') ? 'DATA_EXCH' : 'READ_VAR';
+        }
+        fb = fbEl.value;
+      }
+      const isRW = (fb === 'READ_VAR' || fb === 'WRITE_VAR');
+      const isDexchModbus = (fb === 'DATA_EXCH' && isModbusTrg);
+      // DATA_EXCH 可实现所有类型功能码的通讯：寄存器类型保持可选
+      show('wrapObj', isRW || isDexchModbus); show('wrapFc', isRW || isDexchModbus);
+      show('wrapNum', isRW); show('wrapNb', isRW);
+      show('wrapEmis', fb !== 'READ_VAR'); show('wrapRecp', fb === 'DATA_EXCH');
+      show('wrapGest', fb === 'DATA_EXCH'); show('typNote', fb === 'DATA_EXCH');
+      // 同步合并下拉（读/写寄存器类型）显示值（功能块手动切换后反向同步）
+      const orwSel = document.getElementById('f_orw');
+      const orwCombo = document.getElementById('f_obj').value + ':' + document.getElementById('f_rw').value;
+      if (orwSel.querySelector(`option[value="${orwCombo}"]`)) orwSel.value = orwCombo;
+      document.getElementById('fbHint').textContent = !isModbusTrg ? '显式报文交换：只读 / 只写 / 读写'
+        : isDexchModbus ? 'DATA_EXCH 可实现所有类型功能码的通讯'
+        : '读→READ_VAR；写→WRITE_VAR；读+写→DATA_EXCH';
+
+      const addr = document.getElementById('rawStringOut').value || `''`;
+      const adr = `${lastFuncType}(${addr})`;
+      const gv = id => document.getElementById(id).value;
+      const obj = gv('f_obj'), num = gv('f_num'), nb = gv('f_nb');
+      const emis = gv('f_emis'), recp = gv('f_recp'), action = gv('f_action'), gest = gv('f_gest');
+      // 起始地址 / 数量校验：留空或超限给出提示；数量上限 寄存器 1~125，线圈/离散输入 1~2000
+      const isBit = (obj === '%M' || obj === '%I');
+      const nbMax = isBit ? 2000 : 125;
+      document.getElementById('f_nb').max = nbMax;
+      const numBad = isRW && (num === '' || isNaN(+num) || +num < 0 || +num > 65535);
+      const nbBad = isRW && (nb === '' || isNaN(+nb) || +nb < 1 || +nb > nbMax);
+      document.getElementById('numMsg').classList.toggle('hidden', !numBad);
+      const nbMsg = document.getElementById('nbMsg');
+      nbMsg.textContent = isBit ? '⚠ 数量不能为空，范围 1~2000（线圈/离散输入）' : '⚠ 数量不能为空，范围 1~125（寄存器读写）';
+      nbMsg.classList.toggle('hidden', !nbBad);
+      // 功能码由寄存器类型与读/写方向推导；DATA_EXCH 可实现所有类型功能码（读+写为 22 (0x16)）
+      const rwNow = document.getElementById('f_rw').value;
+      const fcText = isRW ? ((FC_MAP[obj] || {})[fb === 'WRITE_VAR' ? 'write' : 'read'] || '')
+        : isDexchModbus ? (rwNow === 'rw' ? FC_DEXCH : ((FC_MAP[obj] || {})[rwNow === 'write' ? 'write' : 'read'] || (FC_MAP[obj] || {}).read || ''))
+        : '';
+      document.getElementById('f_fc').value = fcText;
+      const hasRecp = (fb === 'DATA_EXCH');   // 仅 DATA_EXCH 有 RECP 输出管脚（READ_VAR / WRITE_VAR 无）
+
+      // 功能块左侧输入管脚（参数值在管脚名前）；右侧输出管脚 RECP
+      let pins;
+      if (fb === 'READ_VAR')       pins = [['ADR', adr, 'ADDM'], ['OBJ', `'${obj}'`, 'STRING'], ['NUM', num, 'INT'], ['NB', nb, 'INT']];
+      else if (fb === 'WRITE_VAR') pins = [['ADR', adr, 'ADDM'], ['OBJ', `'${obj}'`, 'STRING'], ['NUM', num, 'INT'], ['NB', nb, 'INT'], ['EMIS', emis, 'ARRAY']];
+      else                         pins = [['ADR', adr, 'ADDM'], ['TYP', action, 'INT'], ['EMIS', emis, 'ARRAY'], ['GEST', gest, 'ARRAY']];
+
+      // 三栏结构：左侧参数值列（管脚前）｜功能块（管脚名）｜右侧输出值列
+      const rowCls = 'py-1.5 whitespace-nowrap';
+      const st0 = 'font-size:0.68rem';
+      const titleSpacer = `<div class="text-sm font-bold pb-2 border-b border-transparent" style="line-height:1.25rem">&nbsp;</div>`;
+      let leftCol = '', pinRows = '', rightCol = '';
+      pins.forEach(p => {
+        leftCol += `<div class="${rowCls} mono font-bold text-stone-800 text-right" style="${st0}">${p[1]}</div>`;
+        pinRows += `<div class="${rowCls} -mx-3 font-semibold text-left" style="${st0}"><span class="relative plc-pin-in text-stone-700">${p[0]}</span></div>`;
+        rightCol += `<div class="${rowCls}" style="${st0}">&nbsp;</div>`;
+      });
+      if (hasRecp) {
+        pinRows += `<div class="${rowCls} -mx-3 font-semibold text-right" style="${st0}"><span class="relative plc-pin-out text-sky-700">RECP</span></div>`;
+        rightCol += `<div class="${rowCls} mono font-bold text-sky-700" style="${st0}">${recp}</div>`;
+      }
+      document.getElementById('fbGraphic').innerHTML =
+        `<div class="flex items-start justify-center">
+          <div class="flex flex-col pt-4 pr-3.5">${titleSpacer}${leftCol}</div>
+          <div class="plc-block rounded p-4 shadow-sm border-stone-300 min-w-[9rem]">
+            <div class="text-center font-bold text-sm text-stone-900 pb-2 border-b border-stone-300 mono">${fb}</div>
+            ${pinRows}
+          </div>
+          <div class="flex flex-col pt-4 pl-3.5">${titleSpacer}${rightCol}</div>
+        </div>`;
+
+      // ST 程序段（每个管脚参数换行显示）
+      const proto = protoName();
+      let comment, params;
+      if (fb === 'READ_VAR') {
+        comment = `(* ${proto}：${fcText}（${obj} 起始 ${num} 共 ${nb} 个） *)`;
+        params = [[`ADR := ${adr}`], [`OBJ := '${obj}'`], [`NUM := ${num}`], [`NB := ${nb}`]];
+      } else if (fb === 'WRITE_VAR') {
+        comment = `(* ${proto}：${fcText}（${obj} 起始 ${num} 共 ${nb} 个） *)`;
+        params = [[`ADR := ${adr}`], [`OBJ := '${obj}'`], [`NUM := ${num}`], [`NB := ${nb}`], [`EMIS := ${emis}`]];
+      } else {
+        const actTxt = { '1': '读写', '2': '只写', '3': '只读' }[action] || '读写';
+        comment = isDexchModbus
+          ? `(* ${proto}：DATA_EXCH 功能码 ${fcText}（${actTxt}） *)`
+          : `(* ${proto}：DATA_EXCH 显式报文（${actTxt}） *)`;
+        params = [[`ADR := ${adr}`], [`TYP := ${action}`], [`EMIS := ${emis}`], [`GEST := ${gest}`], [`RECP := ${recp}`]];
+      }
+      const body = `${fb}(\n    ${params.map(p => p[0]).join(',\n    ')}\n);`;
+      document.getElementById('stCodeOut').value = `${comment}\n${body}`;
+    }
+
+    // ========== 逆向解析 ==========
+    function executeParse() {
+      let raw = document.getElementById('parseInput').value.trim();
+      const resArea = document.getElementById('parseResultArea');
+      const tbody = document.getElementById('parseDetailsTbody');
+      
+      if (!raw) return;
+
+      let funcType = raw.toUpperCase().includes('ADDMX') ? 'ADDMX' : 'ADDM';
+      let content = raw.replace(/^ADDMX\s*\(\s*['"]?/i, '').replace(/^ADDM\s*\(\s*['"]?/i, '').replace(/['"]?\s*\);?$/i, '').replace(/^['"]|['"]$/g, '').trim();
+
+      document.getElementById('resFuncType').textContent = funcType;
+      tbody.innerHTML = '';
+      let parts = [];
+      let desc = '';
+
+      if (content.includes('\\')) {
+        funcType = 'ADDMX';
+        const splitSlash = content.split(/\\{1,2}/); // 兼容 \\ 与旧格式 \
+        const ipMatch = splitSlash[0].match(/^(.*?)\{(.*?)\}(.*)$/);
+        
+        let rmc = ipMatch ? ipMatch[1] : splitSlash[0];
+        let ip = ipMatch ? ipMatch[2] : '-';
+        parts.push({ name: '主站网口', val: rmc, note: 'CPU 或网卡发送端位置' });
+        parts.push({ name: 'CRA 适配器 IP', val: `{${ip}}`, note: 'EIO 远程机架 IP' });
+        
+        const subParts = splitSlash[1].split('.');
+        if(subParts.length >= 4) {
+          let remRmc = `${subParts[0]}.${subParts[1]}.${subParts[2]}`;
+          parts.push({ name: '子站串口模块', val: `\\\\${remRmc}`, note: '跨站串口模块位置' });
+          parts.push({ name: 'Modbus 从站号', val: `.${subParts[3]}`, note: `末端 RTU 设备地址` });
+          desc = `跨站穿透访问远程串口上的 Modbus 从站 #${subParts[3]}。`;
+        }
+      } 
+      else if (content.includes('{') && content.includes('}')) {
+        const ipMatch = content.match(/^(.*?)\{(.*?)\}(.*)$/);
+        if(ipMatch) {
+            let rmc = ipMatch[1]; let ip = ipMatch[2]; let suffix = ipMatch[3];
+            parts.push({ name: '本地通信端口', val: rmc, note: '主站物理槽位通道' });
+            parts.push({ name: '目标设备 IP / 链路名', val: `{${ip}}`, note: '目标设备以太网地址或网络链路名' });
+
+            // 站号 d 直接拼在 {IP} 后：d / d.后缀（兼容旧格式 .d）
+            const stMatch = suffix ? suffix.match(/^\.?(\d+)(?:\.(.*))?$/) : null;
+            if (stMatch) {
+              parts.push({ name: '从站 Unit ID', val: stMatch[1], note: `Modbus 网关后级从站号` });
+              if (stMatch[2]) parts.push({ name: '协议/服务后缀', val: stMatch[2], note: `定义目标服务请求模式` });
+              desc = `通过以太网网关设备 (${ip}) 寻址后端 RTU 从站 #${stMatch[1]}。`;
+            } else if (suffix) {
+              parts.push({ name: '协议/服务后缀', val: suffix, note: `定义目标服务请求模式` });
+              desc = `基于以太网直连调用目标设备的 [${suffix}] 专属服务。`;
+            } else {
+              desc = `标准的 Modbus TCP 协议以太网直连通讯（站号缺省时访问站号 255 的设备）。`;
+            }
+        }
+      } 
+      else if (content.includes('.')) {
+        const dots = content.split('.');
+        if (dots.length === 4) {
+          let rmc = `${dots[0]}.${dots[1]}.${dots[2]}`;
+          parts.push({ name: '本地通道', val: rmc, note: '本地系统物理串行接口' });
+          parts.push({ name: '设备站号', val: `.${dots[3]}`, note: `本地总线设备站号` });
+          desc = `指令直接驱动本地总线端口进行串口通信。`;
+        }
+      } else {
+        parts.push({ name: '无法识别', val: content, note: '地址不符合已知格式标准' });
+      }
+
+      document.getElementById('resDescription').textContent = desc;
+
+      parts.forEach((p, idx) => {
+        // 使用 CSS 伪类替代 JS 斑马纹计算，保证纯展示逻辑：高亮行 hl
+        trClass = "border-b border-stone-200 hover:bg-stone-50 transition-colors";
+        const tr = document.createElement('tr');
+        tr.className = trClass;
+        tr.innerHTML = `<td class="px-3 py-2 font-medium text-stone-700 mono">${p.name}</td>
+          <td class="px-3 py-2 mono font-bold text-sky-700 bg-sky-100/50">${p.val}</td>
+          <td class="px-3 py-2 text-stone-500 text-xs sm:text-sm">${p.note}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      resArea.classList.remove('hidden'); // 显示结果容器[cite: 1]
+    }
+
+    function resetGenerator() {
+      document.getElementById('cpuType').value = 'M580';
+      document.getElementById('interfaceLoc').value = 'cpu_eth';
+      document.getElementById('commTarget').value = 'modbus_tcp';
+      updateDropdowns(); // 重建动态字段（恢复默认值）并实时重算
+    }
+
+    function resetParser() {
+      document.getElementById('parseInput').value = '';
+      document.getElementById('parseResultArea').classList.add('hidden'); // 清空并隐藏结果区[cite: 1]
+    }
+
+    function copyToClipboard(elementId, btn) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const showCheck = () => {
+        if (!btn) return;
+        const originHTML = btn.innerHTML;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        setTimeout(() => { btn.innerHTML = originHTML; }, 2000);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.value).then(showCheck).catch(() => { el.select(); document.execCommand('copy'); showCheck(); });
+      } else {
+        el.select();
+        document.execCommand('copy');
+        showCheck();
+      }
+    }
+
+    window.onload = function() {
+      updateDropdowns();
+    };
+  </script>
+</body>
+</html>
