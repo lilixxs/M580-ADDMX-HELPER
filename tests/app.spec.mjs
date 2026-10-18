@@ -170,6 +170,15 @@ test('single-file page works with the browser offline', async ({ page, context }
   expect(await page.locator('body').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(250, 249, 245)');
 });
 
+test('local server exposes public files but blocks source documents and Git metadata', async ({ request }) => {
+  for (const path of ['/LICENSE', '/THIRD_PARTY_NOTICES.md']) {
+    expect((await request.get(path)).status()).toBe(200);
+  }
+  for (const path of ['/.git/config', '/package-lock.json', '/ADDMX地址生成解析工具.docx']) {
+    expect((await request.get(path)).status()).toBe(404);
+  }
+});
+
 for (const width of [1440, 1024, 820]) {
   test(`layout and screenshots at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 });
@@ -185,6 +194,14 @@ for (const width of [1440, 1024, 820]) {
     await page.screenshot({ path: `artifacts/generator-${width}.png`, fullPage: true });
     await page.selectOption('#interfaceLoc', 'rio_serial');
     await page.selectOption('#rackPos', 'remote_ext');
+    const selectionFits = await page.locator('#interfaceLoc').evaluate(el => {
+      const style = getComputedStyle(el);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = `${style.fontSize} ${style.fontFamily}`;
+      return ctx.measureText(el.selectedOptions[0].textContent).width < el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 24;
+    });
+    expect(selectionFits).toBe(true);
     await page.locator('#genSchematicArea').screenshot({ path: `artifacts/remote-${width}.png` });
     await page.click('#tabParseBtn');
     await page.fill('#parseInput', "ADDMX('0.0.3{192.168.100.31}\\\\1.8.1.15')");
